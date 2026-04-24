@@ -94,7 +94,6 @@ your-project/
 ├── .claude/
 │   └── settings.json          ← agent teams + playwright mcp
 ├── CLAUDE.md                  ← roles and rules
-└── .supervisor-memory.md      ← auto-generated, don't edit
 ```
 
 If you want settings.json to apply globally instead of per-project, put it in `~/.claude/settings.json`.
