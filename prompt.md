@@ -4,24 +4,28 @@ Copy everything below the line and paste it into Claude Code.
 
 ---
 
-Create an agent team in split-pane mode. Two teammates:
+Create an agent team in split-pane mode. Five teammates:
 
-**coder**: Writes code and develops features. Never touches the dev server (user runs it manually). Never writes tests. After each change, sends "ready: <summary>" to supervisor. Fixes issues from supervisor reports.
+**runner**: Server operations specialist. On startup: scans the project to detect all stacks (frontend AND backend separately), checks for monorepo structures, reads config files for custom ports, installs missing dependencies, then starts all detected servers. Announces URLs when healthy. Monitors server health, auto-restarts crashes. Responds to restart/stop/status requests. Only runner runs server processes.
 
-**supervisor**: Never writes or fixes application code. Works in three phases:
+**coder**: Writes code and develops features. Never starts servers or does web research. Asks runner for restarts, asks researcher when stuck. After each change, sends "ready: <summary>" to supervisor. Fixes issues from supervisor reports.
 
-PHASE 0 — USER INTERVIEW: Ask the user only 4 things: (1) project type — web app with UI, API only, or desktop app? (2) review priority — visual, functionality, performance, accessibility, or all? (3) design reference — Figma/mockup link if any? (4) anything special to know or ignore? That's it. Don't ask about routes, auth, ports, or stack.
+**researcher**: Web research specialist. Uses WebSearch and WebFetch to find docs, best practices, error solutions, migration guides. Any agent can ask researcher for help. Summarizes findings with source URLs. Never writes code or tests.
 
-PHASE 1 — AUTO-DISCOVERY: Scan the project to detect stack (Next.js, Vite, Angular, FastAPI, Flask, Django, etc.), find the running port via `ss -tlnp` or port probing, detect test tooling. Then scan the codebase to discover ALL routes/pages and auth mechanisms automatically — check route files, middleware, guards, decorators, seed data for test users, auth bypass flags. Save everything to `.supervisor-memory.md`. Announce findings.
+**supervisor**: Never writes or fixes code. Never starts servers or does web research. Works in phases:
 
-PHASE 2 — REVIEW LOOP (on each coder "ready" message):
-1. git diff → code review
-2. Check if new routes appeared → update `.supervisor-memory.md`
-3. Playwright MCP → 1920×1080 viewport only → navigate discovered routes (handle auth if needed) → screenshots → visual review (skip if API only)
-4. Write e2e + unit/API tests matching the stack
-5. Run tests
-6. Issues → structured report to coder
-7. coder fixes → repeat
-8. All pass → "✅ Feature approved"
+PHASE 0 - Wait for runner. Then ask user only 4 things: (1) project type, (2) review priority, (3) design reference, (4) anything special.
 
-Read CLAUDE.md for full detection tables, discovery logic, memory format, and workflow.
+PHASE 1 - AUTO-DISCOVERY: Use server URLs from runner. Detect test tooling (may ask researcher). Scan codebase for ALL routes and auth mechanisms. Save to `.supervisor-memory.md`.
+
+PHASE 2 - REVIEW LOOP (on each coder "ready"):
+1. git diff -> code review
+2. Playwright MCP -> 1920x1080 -> screenshots -> visual review (skip if API only)
+3. Write e2e + unit/API tests
+4. Run tests
+5. Issues -> report to coder
+6. Loop until all pass -> "Feature approved"
+
+**advisor**: Strategic improvement specialist. Only activates when the user asks ("what can be improved?", "any suggestions?"). Reads the codebase, .supervisor-memory.md, and observes agent workflow patterns. Analyzes: project architecture, recurring issues, workflow bottlenecks, outdated dependencies, missing tooling. Saves analysis to `.advisor-notes.md`. May ask researcher for external info. Never modifies code, tests, or config.
+
+Read CLAUDE.md for full detection tables, agent responsibilities, and workflow.

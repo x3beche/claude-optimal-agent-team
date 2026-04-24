@@ -1,81 +1,58 @@
 # Claude Agent Team
 
-Two agents for Claude Code. One writes code, the other reviews it — screenshots the browser, writes tests, runs them, and doesn't stop until everything passes.
+A five-agent system for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that handles the entire dev workflow: one agent manages servers, one writes code, one reviews and tests, one handles web research, and one suggests strategic improvements. Auto-discovers your stack, routes, and auth without manual configuration.
 
-No plugins, no global config changes, no 50-file setup. 3 files in your project, delete when you're done.
+## Features
 
-```
-YOU                    CODER                  SUPERVISOR
- │                       │                        │
- │── "build login page"──▶                        │
- │                       │── codes it ──┐         │
- │                       │              │         │
- │                       │◀─── done ────┘         │
- │                       │                        │
- │                       │── "ready: login" ─────▶│
- │                       │                        │── git diff → review
- │                       │                        │── browser → screenshot
- │                       │                        │── writes tests
- │                       │                        │── runs tests
- │                       │                        │
- │                       │◀── ❌ report ──────────│  (if issues)
- │                       │── fixes ──┐            │
- │                       │           │            │
- │                       │◀── done ──┘            │
- │                       │── "ready: fixes" ─────▶│
- │                       │                        │── re-tests
- │                       │                        │
- │                       │◀── ✅ approved ────────│  (all pass)
-```
+- **Server management**: Runner detects stack, installs deps, starts servers, monitors health
+- **Web research**: Researcher finds docs, best practices, error solutions via WebSearch/WebFetch
+- **Auto-discovery**: Detects stack, ports, routes, auth, test tooling automatically
+- **Browser testing**: 1920x1080 screenshots via Playwright MCP
+- **Code review**: Reviews every git diff for quality, security, performance
+- **Test writing**: E2E and unit tests matching your stack
+- **Strategic advice**: Advisor analyzes project and workflow, suggests improvements on demand
+- **Memory**: `.supervisor-memory.md` for discoveries, `.advisor-notes.md` for improvement analysis
+- **Zero config**: 4 questions, figures out everything else
 
-## What it does
+## Requirements
 
-The supervisor agent figures out your project on its own. It scans your files to detect the stack, finds the running port, discovers routes from source code, maps auth mechanisms. All of this gets saved to `.supervisor-memory.md` which updates as your project changes.
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) v2.1.32+
+- [tmux](https://github.com/tmux/tmux) (required by Claude Code Agent Teams for split-pane display)
+- WSL or Ubuntu (for tmux support)
+- [Node.js](https://nodejs.org/) 18+
 
-When the coder finishes something, the supervisor:
-- Reviews the diff
-- Opens the browser and takes a screenshot (1920×1080)
-- Writes tests that match your stack (Playwright, Vitest, Jest, pytest, whatever fits)
-- Runs them
-- Reports failures back to the coder
+## Quick Start
 
-This loops until everything passes. It won't approve a feature with failing tests.
-
-## What you need
-
-- Claude Code v2.1.32+
-- tmux (`brew install tmux` or `sudo apt install tmux`)
-- Node 18+ for Playwright MCP
-
-## Setup
+### 1. Clone
 
 ```bash
-git clone https://github.com/x3beche/claude-agent-team.git
+git clone https://github.com/x3beche/Claude-Agent-Team.git
 ```
 
-Copy the files into your project:
+### 2. Prerequisites
+
+```bash
+brew install tmux          # macOS
+sudo apt install tmux      # Ubuntu/Debian
+npx playwright install     # browser engines
+```
+
+### 3. Install to your project
 
 ```bash
 cd your-project
-cp /path/to/claude-agent-team/CLAUDE.md .
+bash /path/to/Claude-Agent-Team/install.sh
+```
+
+Or manually:
+
+```bash
+cp /path/to/Claude-Agent-Team/CLAUDE.md .
 mkdir -p .claude
-cp /path/to/claude-agent-team/config/settings.json .claude/
+cp /path/to/Claude-Agent-Team/.claude/settings.json .claude/
 ```
 
-Or just run the install script:
-
-```bash
-cd your-project
-bash /path/to/claude-agent-team/install.sh
-```
-
-Install Playwright browsers if you haven't:
-
-```bash
-npx playwright install
-```
-
-Then start your dev server in one terminal (you manage it, agents never touch it), and in another:
+### 4. Start
 
 ```bash
 cd your-project
@@ -83,43 +60,77 @@ tmux
 claude
 ```
 
-Paste the contents of [prompt.md](prompt.md) into Claude Code. Supervisor asks you 4 questions — project type, review priority, design reference, anything special. That's the only manual step. After that it discovers everything else by itself.
+No need to start your dev server. Runner handles it.
 
-`Shift+Down` to switch between agent panes.
+### 5. Paste the prompt
 
-## File structure
+Copy contents of [prompt.md](prompt.md) into Claude Code.
 
+### 6. Answer 4 questions, start coding
+
+Give coder a task and the loop runs autonomously. Ask advisor for suggestions anytime.
+
+## File Structure
+
+This repo:
+```
+Claude-Agent-Team/
+|-- CLAUDE.md                   <- copy to your project root
+|-- .claude/
+|   +-- settings.json           <- copy to your project's .claude/
+|-- prompt.md                   <- paste contents into Claude Code
+|-- install.sh                  <- or just run this
+|-- LICENSE
++-- .gitignore
+```
+
+Your project after install:
 ```
 your-project/
-├── .claude/
-│   └── settings.json          ← agent teams + playwright mcp
-└──  CLAUDE.md                  ← roles and rules
+|-- CLAUDE.md                   <- agent roles, discovery logic, workflow
+|-- .claude/
+|   +-- settings.json           <- enables Agent Teams + Playwright MCP
+|-- .supervisor-memory.md       <- auto-generated: routes, auth, discoveries
++-- .advisor-notes.md           <- auto-generated: improvement suggestions
 ```
 
-If you want settings.json to apply globally instead of per-project, put it in `~/.claude/settings.json`.
+## Supported Stacks (auto-detected)
 
-## Supported stacks
+| Frontend | Backend | Other |
+|----------|---------|-------|
+| Next.js | FastAPI | Go |
+| Vite (React/Vue/Svelte) | Flask | Rust |
+| Angular | Django | Rails |
+| CRA | Express | |
+| Nuxt | | |
+| SvelteKit | | |
 
-It detects these automatically by scanning your project files:
+Works with any combination. Monorepo structures supported. Not limited to web: API, CLI, mobile, desktop, library projects all work.
 
-Next.js, Vite, Angular, CRA, Nuxt, SvelteKit, FastAPI, Flask, Django, Rails, Express, Go, Rust
+## The Five Agents
 
-If your stack isn't listed it'll still try — it just looks at what files exist and figures it out.
+### Runner (server operations)
+Detects stacks, installs deps, starts/restarts servers, monitors health.
 
-## How the supervisor works
+### Coder (development)
+Writes code, asks runner for restarts, asks researcher when stuck. Sends "ready" to supervisor.
 
-**Interview** — Asks 4 high-level questions. Doesn't ask about routes, auth, or ports.
+### Supervisor (quality assurance)
+Discovers routes and auth from source. Screenshots via Playwright. Writes and runs tests. Sends structured reports. Keeps `.supervisor-memory.md` updated.
 
-**Discovery** — Scans the codebase. Finds routes from your route files, decorators, middleware. Finds auth from guards, middleware, seed files, env flags. Detects test tooling. Finds the running port via `ss -tlnp` or probes common ports. Saves everything to `.supervisor-memory.md`.
+### Researcher (web research)
+Searches documentation, finds error solutions, looks up best practices via WebSearch and WebFetch. Any agent can request research. Summarizes with source URLs.
 
-**Review loop** — On every coder "ready" message: reviews the diff, takes screenshots, writes tests, runs them. Fails → reports to coder → coder fixes → supervisor checks again. Passes → feature approved. This loop is rigid — it doesn't skip steps or approve half-done work.
+### Advisor (strategic improvements)
+Activates only when asked. Analyzes project architecture, reads `.supervisor-memory.md` for recurring issues, observes workflow patterns, checks dependencies, suggests improvements. Saves to `.advisor-notes.md`. Can ask researcher for external info. Never modifies anything.
 
 ## Notes
 
-- First run downloads browser engines, takes a minute or two
-- Visual tests are 1920×1080 desktop only
-- Two agents with structured communication means less context bloat and lower token usage compared to larger multi-agent setups
-- Dev server is yours — agents never start, stop, or restart it
+- First run downloads Playwright browser engines (~200MB)
+- All visual tests run at 1920x1080 desktop resolution only
+- tmux is a Claude Code Agent Teams requirement, not specific to this system
+- Playwright plugin is included but handled automatically
+- Advisor is passive: never interrupts, only responds when asked
 
 ## License
 

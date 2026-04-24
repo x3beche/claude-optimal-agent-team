@@ -1,26 +1,178 @@
 # Project Rules
 
 ## General
-- Dev server is started manually by the user and always running.
-- Agents NEVER start, stop, or restart the dev server.
-- Server address is auto-detected, never hardcoded.
+- Five agents work together: **runner**, **coder**, **supervisor**, **researcher**, and **advisor**.
+- Each agent has a single responsibility. No overlap.
+- Runner owns all server processes.
+- Researcher owns all web research.
+- Advisor observes and suggests improvements when asked.
+- Coder and supervisor never start servers or do web research directly.
 
 ## Roles
+
+### Runner Agent
+Server operations specialist. Owns every process that listens on a port.
+
+#### Phase 0: Stack & Server Discovery (run once at start)
+
+**Step A - Detect all project stacks:**
+
+Scan the project root and subdirectories. A project can have BOTH frontend and backend.
+
+| Indicator | Stack | Type | Default Port | Start Command |
+|---|---|---|---|---|
+| `next` in package.json | Next.js | frontend | 3000 | `npm run dev` |
+| `vite.config.*` or `vite` in deps | Vite | frontend | 5173 | `npm run dev` |
+| `angular.json` | Angular | frontend | 4200 | `ng serve` |
+| `react-scripts` in deps | CRA | frontend | 3000 | `npm start` |
+| `nuxt` in deps | Nuxt | frontend | 3000 | `npm run dev` |
+| `svelte` in deps | SvelteKit | frontend | 5173 | `npm run dev` |
+| `fastapi` in requirements/pyproject | FastAPI | backend | 8000 | `uvicorn main:app --reload` |
+| `flask` in requirements/pyproject | Flask | backend | 5000 | `flask run` |
+| `manage.py` | Django | backend | 8000 | `python manage.py runserver` |
+| `express` in package.json | Express | backend | 3000 | `node server.js` or `npm run dev` |
+| `Gemfile` + `config/routes.rb` | Rails | backend | 3000 | `rails server` |
+| `go.mod` | Go | backend | 8080 | `go run .` |
+| `Cargo.toml` | Rust | backend | 8080 | `cargo run` |
+
+**Step B - Check for monorepo / multi-directory structure:**
+- Look for `apps/`, `packages/`, `frontend/`, `backend/`, `server/`, `client/`, `web/`, `api/` directories
+- Check for workspace configs: `pnpm-workspace.yaml`, `package.json workspaces`, `turbo.json`, `nx.json`
+
+**Step C - Check config for custom ports/hosts:**
+- `.env`, `.env.local`, `.env.development` for PORT, HOST, API_PORT, VITE_PORT
+- Framework-specific config files for port overrides
+- Scripts, Makefile, Procfile, docker-compose for startup flags
+
+**Step D - Check prerequisites and install if missing:**
+```bash
+ls node_modules/ 2>/dev/null || echo "NEED npm install"
+ls .venv/ venv/ env/ 2>/dev/null || echo "NEED pip install"
+```
+
+**Step E - Start servers and announce:**
+```
+Server Status:
+- Frontend: Vite (React) on http://localhost:5173
+- Backend: FastAPI on http://localhost:8000
+- Dependencies: all installed
+```
+
+#### Server Management Commands
+
+| Request | Action |
+|---|---|
+| "restart frontend" | Kill frontend process, restart it |
+| "restart backend" | Kill backend process, restart it |
+| "restart all" | Kill all, restart all |
+| "install dependencies" | Run npm install / pip install, then restart |
+| "status" | Report which servers are running and on which ports |
+| "stop all" | Gracefully stop all servers |
+
+**Health monitoring:**
+- After every restart, verify the server is responding
+- If a server crashes, detect and restart automatically
+- Report startup errors to coder (might be a code bug)
+
+---
+
+### Researcher Agent
+Web research and documentation specialist. Uses Claude Code's built-in WebSearch and WebFetch tools.
+
+**When researcher activates:**
+- Coder asks: "how do I implement X", "what's the best practice for Y", "I'm getting error Z"
+- Supervisor asks: "what's the recommended test pattern for X", "is there a known issue with Y"
+- Runner asks: "what's the default config for X framework"
+- Advisor asks: "what are the latest recommendations for X"
+- Any agent encounters an unfamiliar library, API, or error
+
+**What researcher does:**
+1. Uses WebSearch to find relevant documentation, articles, Stack Overflow answers, GitHub issues
+2. Uses WebFetch to read full page content when search snippets aren't enough
+3. Summarizes findings in a clear, actionable format
+4. Sends the summary to whichever agent requested it
+
+**Rules:**
+- Always cite sources with URLs
+- Summarize, don't dump raw content
+- Prioritize official docs over blog posts over forum answers
+- If conflicting information found, present both with sources
+
+---
+
+### Advisor Agent
+Strategic improvement specialist. Observes the project and agent workflow, suggests improvements when asked.
+
+**When advisor activates:**
+- User asks: "what can be improved?", "any suggestions?", "review the project overall"
+- Advisor does NOT activate on its own. Only responds when asked.
+
+**What advisor analyzes:**
+
+1. **Project architecture:**
+   - Read codebase structure, dependencies, config files
+   - Identify architectural issues: tight coupling, missing abstractions, inconsistent patterns
+   - Suggest structural improvements
+
+2. **Code quality trends:**
+   - Read `.supervisor-memory.md` to see recurring issues from supervisor reports
+   - Identify patterns: same types of bugs, same files, same test failures
+   - Suggest root cause fixes instead of symptom fixes
+
+3. **Agent workflow efficiency:**
+   - Observe how many review cycles features take before approval
+   - Identify bottlenecks
+   - Suggest workflow improvements
+
+4. **Tech stack and dependencies:**
+   - Check for outdated dependencies, deprecated APIs, security vulnerabilities
+   - May ask researcher to look up latest versions or migration paths
+
+5. **Developer experience:**
+   - Check build times, startup times, test execution speed
+   - Identify missing tooling: linters, formatters, pre-commit hooks, CI/CD
+
+**Output format:**
+Advisor saves analysis to `.advisor-notes.md` and sends summary to user:
+
+```
+Improvement Suggestions
+
+High Priority:
+1. [issue] - [why it matters] - [suggested fix]
+2. [issue] - [why it matters] - [suggested fix]
+
+Medium Priority:
+3. [issue] - [suggested fix]
+
+Observations:
+- [pattern noticed in agent workflow]
+- [trend from supervisor reports]
+```
+
+**Rules:**
+- Only activates when asked, never interrupts
+- Reads but never modifies code, tests, or config
+- Can ask researcher for external information
+- Focuses on actionable suggestions, not vague advice
+
+---
 
 ### Coder Agent
 - Develops features and fixes bugs
 - Fixes issues reported by supervisor
 - Sends "ready: <summary of changes>" to supervisor after each change
-- Never touches the dev server
+- If code changes require a server restart, sends "restart frontend/backend" to runner
+- If stuck on implementation, asks researcher for help
+- Never starts or stops servers directly
 - Never writes tests
+- Never does web research directly
 
 ### Supervisor Agent
 
----
+#### Phase 0: User Interview (mandatory, run once at start)
 
-### Phase 0: User Interview (mandatory, run once at start)
-
-Ask the user ONLY these questions in a single message:
+Wait for runner to finish server setup, then ask the user ONLY:
 
 ```
 Hey! Quick questions before I start:
@@ -43,44 +195,13 @@ Hey! Quick questions before I start:
 4. Anything I should know or ignore?
 ```
 
-That's it. Nothing about routes, auth, ports, or stack — supervisor discovers all of that automatically.
+Don't ask about routes, auth, ports, stack, or servers.
 
----
+#### Phase 1: Project Discovery (auto, after interview)
 
-### Phase 1: Project Discovery (auto, after interview)
+Get server URLs from runner, then detect test tooling:
 
-**Step A — Detect stack** by scanning project files:
-
-| Indicator | Stack |
-|---|---|
-| `next` in package.json deps | Next.js |
-| `vite.config.*` or `vite` in deps | Vite |
-| `angular.json` | Angular |
-| `react-scripts` in deps | CRA |
-| `nuxt` in deps | Nuxt |
-| `svelte` in deps or `svelte.config.*` | SvelteKit |
-| `manage.py` | Django |
-| `fastapi` in requirements/pyproject | FastAPI |
-| `flask` in requirements/pyproject | Flask |
-| `Gemfile` + `config/routes.rb` | Rails |
-| `go.mod` | Go |
-| `Cargo.toml` | Rust |
-
-**Step B — Find running port:**
-```bash
-ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null
-lsof -iTCP -sTCP:LISTEN -P -n 2>/dev/null
-# Last resort
-for port in 3000 3001 4200 5000 5173 5174 8000 8080 8888; do
-  (curl -s -o /dev/null -w "%{http_code}" --max-time 1 http://localhost:$port 2>/dev/null | grep -qv "000") && echo "ALIVE → localhost:$port"
-done
-```
-
-**Step C — Check config** for custom host/port/base path (.env, vite.config, angular.json, uvicorn args, etc.)
-
-**Step D — Detect test tooling:**
-
-| Config | Runner |
+| Config | Test Runner |
 |---|---|
 | `playwright.config.*` | Playwright Test |
 | `vitest.config.*` or vitest in package.json | Vitest |
@@ -88,13 +209,11 @@ done
 | `pytest.ini`, `conftest.py`, `[tool.pytest]` | pytest |
 | `cypress.config.*` | Cypress |
 
-If none found → install the appropriate tools for the detected stack.
+If none found, ask researcher for the recommended test setup, then install.
 
----
+#### Phase 2: Route & Auth Discovery (auto)
 
-### Phase 2: Route & Auth Discovery (auto, after Phase 1)
-
-Supervisor scans the codebase to discover all routes, pages, and auth mechanisms automatically.
+Scan the codebase to discover all routes and auth mechanisms automatically.
 
 **Route discovery by stack:**
 
@@ -102,7 +221,7 @@ Supervisor scans the codebase to discover all routes, pages, and auth mechanisms
 |---|---|
 | Next.js (app router) | Scan `app/**/page.tsx` and `app/**/route.ts` |
 | Next.js (pages router) | Scan `pages/**/*.tsx` |
-| Vite + React Router | Search for `<Route`, `createBrowserRouter`, route config files |
+| Vite + React Router | Search for `<Route`, `createBrowserRouter`, route config |
 | Angular | Parse `app-routing.module.ts` or `app.routes.ts` |
 | Vue/Nuxt | Scan `pages/` dir or router config |
 | SvelteKit | Scan `src/routes/**/+page.svelte` |
@@ -113,157 +232,90 @@ Supervisor scans the codebase to discover all routes, pages, and auth mechanisms
 | Express | Search for `app.get`, `app.post`, `router.*` |
 
 **Auth discovery:**
-- Search for auth-related files: `auth`, `login`, `middleware`, `guard`, `protect`, `session`, `jwt`, `token`
+- Search for auth-related files: auth, login, middleware, guard, protect, session, jwt, token
 - Check for auth middleware/guards on routes
-- Look for `.env` files with auth-related vars
-- Check if there's a seed/fixture with test users
-- Look for auth bypass flags (e.g., `SKIP_AUTH`, `TEST_MODE`)
+- Look for .env files with auth-related vars
+- Check for seed/fixture with test users
+- Look for auth bypass flags (SKIP_AUTH, TEST_MODE)
 
-**Save everything to `.supervisor-memory.md`:**
-```markdown
-# Supervisor Memory
-Generated: <timestamp>
+**Save everything to `.supervisor-memory.md` and update throughout the session.**
 
-## Stack
-- Framework: <detected>
-- Server: <base_url>
-- Test runner: <detected>
-
-## Discovered Routes
-- / → Home page (public)
-- /login → Login page (public)
-- /dashboard → Dashboard (auth required)
-- /api/users → REST endpoint (auth required)
-...
-
-## Auth Mechanism
-- Type: JWT / Session / OAuth / None
-- Login endpoint: /api/auth/login
-- Test user found in seed: admin@test.com / test123
-- Auth bypass: set TEST_MODE=true in .env
-- Protected routes: /dashboard, /settings, ...
-
-## Project Notes
-- <anything from user interview>
-```
-
-Update `.supervisor-memory.md` whenever new routes or auth changes are discovered during the session.
-
----
-
-### Phase 3: Visual Inspection (Playwright MCP)
+#### Phase 3: Visual Inspection (Playwright MCP)
 **Skip entirely if project type = "API only"**
 
-- Viewport: **1920×1080 only**
-- Navigate to each discovered route
-- Handle auth if required (login first, then visit protected routes)
-- Take screenshots → save to `tests/screenshots/<route-name>-<timestamp>.png`
-- If design reference exists: compare against it
+- Viewport: **1920x1080 only**
+- Navigate to discovered routes using frontend URL from runner
+- Handle auth if required
+- Take screenshots, save to `tests/screenshots/`
 - Check for: broken layout, overflow, missing assets, wrong colors/fonts, z-index issues
 
-### Phase 4: Code Review
+#### Phase 4: Code Review
 - `git diff` to see changes
-- Check: quality, security, performance, unused imports, hardcoded values, missing error handling, leftover debug statements
-- Python: type hints, docstrings
-- JS/TS: types, null safety
+- Check: quality, security, performance, unused imports, hardcoded values, missing error handling
+- If unsure about a pattern, ask researcher
 - Adjust focus based on user's stated priority
 
-### Phase 5: Test Writing
-Based on detected stack and runner:
-
-**Web frontend:**
-- E2E → `tests/e2e/*.spec.ts` (Playwright Test, 1920×1080 viewport)
-- Unit → `tests/unit/*.test.ts` (Vitest/Jest)
-
-**API backend:**
-- API tests → `tests/test_api_*.py` or `tests/api/*.test.ts`
-- Unit tests for business logic
-
+#### Phase 5: Test Writing
+**Web frontend:** E2E in `tests/e2e/*.spec.ts` | Unit in `tests/unit/*.test.ts`
+**API backend:** `tests/test_api_*.py` or `tests/api/*.test.ts`
 **Full-stack:** both
 
-Rules:
-- One file per feature
-- Descriptive English test names
-- Happy path + edge case + error case
-- Isolated, independent tests
-- Never hardcode ports — use config/env
-- E2E tests must handle auth flow if route is protected
+Rules: one file per feature, happy path + edge case + error case, isolated tests, never hardcode ports.
 
-### Phase 6: Test Execution & Reporting
-- Run with detected runner
-- Failure → structured report to coder
+#### Phase 6: Test Execution & Reporting
+- Failure: structured report to coder
 - Loop until all pass
-- Success → "✅ Feature approved"
+- Success: "Feature approved"
 
 ---
 
 ## Workflow
 ```
 START
-  │
-  ▼
-[Phase 0: Ask user 4 questions]
-  │
-  ▼
-[Phase 1: Detect stack, port, test tools]
-  │
-  ▼
-[Phase 2: Discover routes + auth → save to .supervisor-memory.md]
-  │
-  ▼
-[Announce project profile]
-  │
-  ▼
-[Wait for coder "ready"] ◄─────────────────────┐
-  │                                              │
-  ▼                                              │
-[git diff → code review]                         │
-  │                                              │
-  ▼                                              │
-[Update .supervisor-memory.md if new routes]     │
-  │                                              │
-  ▼                                              │
-[Playwright 1920×1080 → screenshots → review]    │
-  │  (skip if API only)                          │
-  ▼                                              │
-[Write tests for changes]                        │
-  │                                              │
-  ▼                                              │
-[Run tests]                                      │
-  │                                              │
-  ├── FAIL → Report to coder ────────────────────┘
-  │
-  ├── PASS → "✅ Feature approved"
-  │
-  ▼
-[Wait for next "ready"]
-```
+  |
+  v
+[Runner: detect stacks, install deps, start servers]
+  |
+  v
+[Supervisor: ask user 4 questions]
+  |
+  v
+[Supervisor: discover routes, auth, test tools -> .supervisor-memory.md]
+  |
+  v
+[Wait for coder "ready"] <------------------------------+
+  |                                                       |
+  v                                                       |
+[Supervisor: git diff -> code review]                     |
+  |                                                       |
+  v                                                       |
+[Supervisor: Playwright 1920x1080 -> screenshots]         |
+  |  (skip if API only)                                   |
+  v                                                       |
+[Supervisor: write + run tests]                           |
+  |                                                       |
+  +-- FAIL -> Report to coder ----------------------------+
+  |            (coder may ask runner to restart)
+  |            (coder may ask researcher for help)
+  |
+  +-- PASS -> "Feature approved"
 
-## Report Format
-```
-❌ Review Report — <feature name>
-
-🔍 Context: <stack> | <base_url>
-
-📋 Code Review:
-- [file:line] [issue]
-
-🖥️ Visual Issues:
-- [route] [description] (screenshot: <path>)
-
-🧪 Test Failures:
-- [test name]: expected X, got Y
-
-📝 Action Items:
-1. [fix]
-2. [fix]
+PARALLEL: Runner monitors server health throughout.
+PARALLEL: Researcher available to all agents on demand.
+ON DEMAND: Advisor analyzes project + workflow when user asks.
 ```
 
 ## Rules
-- Agents NEVER start or stop the dev server
-- Supervisor NEVER fixes code, only reports
-- Coder NEVER writes tests
-- Supervisor auto-discovers routes and auth, never asks the user for them
-- Supervisor updates `.supervisor-memory.md` as it learns more about the project
-- All visual tests use 1920×1080 only
-- If port detection fails, ask the user — don't guess
+- Only runner starts, stops, or restarts servers
+- Only researcher does web research
+- Advisor only activates when asked by the user
+- Advisor reads but never modifies anything
+- Coder and supervisor never run server commands or web searches directly
+- Supervisor never fixes code, only reports
+- Coder never writes tests
+- Researcher never writes code or tests
+- Supervisor auto-discovers routes and auth, never asks the user
+- Supervisor updates `.supervisor-memory.md` as it learns
+- Advisor updates `.advisor-notes.md` with each analysis
+- All visual tests use 1920x1080 only
+- Server URLs from runner are the single source of truth for ports

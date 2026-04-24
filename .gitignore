@@ -1,0 +1,6 @@
+.DS_Store
+Thumbs.db
+.supervisor-memory.md
+.advisor-notes.md
+tests/screenshots/
+node_modules/
