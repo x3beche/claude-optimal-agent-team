@@ -93,7 +93,7 @@ Paste the contents of [prompt.md](prompt.md) into Claude Code. Supervisor asks y
 your-project/
 ├── .claude/
 │   └── settings.json          ← agent teams + playwright mcp
-├── CLAUDE.md                  ← roles and rules
+└──  CLAUDE.md                  ← roles and rules
 ```
 
 If you want settings.json to apply globally instead of per-project, put it in `~/.claude/settings.json`.
